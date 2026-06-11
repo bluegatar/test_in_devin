@@ -16,9 +16,54 @@
 | Header `appCode` | `miguvideo_default_android` |
 | Header `userId` | 用户 ID（实测 `1768975581`，仅用于灰度/分流，可选）|
 
-> `NetworkManager` 在 okhttp 拦截器中还会追加一批全局公共头（`sourceId` /
-> `APP-VERSION-CODE` / `userInfo`(URL 编码 JSON) / `terminalId` 等）。但
-> `staticcache/factor` 属公开配置接口，实测仅带 `appCode` 即可命中 CDN 返回。
+> `NetworkManager` 在 okhttp 拦截器中还会追加一批全局公共头。但
+> `staticcache/factor` 属公开配置接口，实测**仅带 `appCode` 即可命中 CDN 返回**。
+
+### 完整上线请求头（ecapture text 模式实测，android/ajsb 仅 path 不同）
+
+业务层只塞 `appCode`(+`userId`)，`NetworkManager` 在 okhttp 拦截器追加其余全局公共头。
+线缆上的完整头：
+
+```
+GET /app-management/videox/staticcache/v2/factor/miguvideo/ajsb HTTP/1.1
+l_t: 1781199012851                 # 请求毫秒时间戳（== timeStamp）
+l_s: 263ffa22005132eea7082e295a9b2985   # 请求签名（疑似 MD5；公开接口实测不强校验）
+l_c: 305ce4bb90adb65cf269c6ba3a39b953   # 客户端ID（== clientId）
+clientId: 305ce4bb90adb65cf269c6ba3a39b953
+timeStamp: 1781199012851
+APP-VERSION-CODE: 260585013
+appVersion: 2600058500
+appVersionName: 6.5.85
+appCode: miguvideo_default_android
+appId: miguvideo
+terminalId: android
+osInfo: AD
+networkInfo: WIFI
+Support-Pendant: 1
+User-Agent: Dalvik/2.1.0 (Linux; U; Android 13; 23076RA4BC Build/TKQ1.221114.001)
+Phone-Info: Redmi|23076RA4BC|13
+imei: unkonw
+SDKCEId: 27fb3129-5a54-45bc-8af1-7dc8f1155501
+X-UP-CLIENT-CHANNEL-ID: 2600058500-99000-200300220100002
+Cache-Control: no-cache
+Accept-Encoding: gzip
+Host: v1-sc.miguvideo.com
+Connection: Keep-Alive
+```
+
+> 注意：wire 头里没有 `userId`（业务 map 里的 `userId` 未直接上线），设备标识是
+> `clientId`/`l_c`。其余全局头非必须；签名 `l_s` 对该公开接口不强校验。
+
+### 抓包方法对比（实践经验）
+
+- **ecapture text 模式**（`./ecapture tls -l cap.log`，`probe=OpenSSL`）：uprobe 挂
+  `SSL_write/SSL_read`，拿解密后明文，**与网卡无关，最稳**，能直接看到上面整段头。
+- **ecapture pcap 模式**（`-m pcap`）：tc-eBPF 在 `-i <网卡>` 抓加密帧 + 把密钥写进
+  pcapng(DSB)。强依赖 `-i` 指对真实出口网卡，否则 pcapng 为空；输出必须用 `.pcapng`
+  （`.pcap` 会丢密钥导致 Wireshark 无法解密）。
+- **VPN 抓包 App + SSL pinning**：见 `frida_bypass_full_v2.js`（信任链全绕过 + VPN 检测
+  绕过）；另需把抓包 App 的 CA 装进**系统证书库**、并让其解密非 443 端口（如登录
+  `passport.migu.cn:8443`）。
 
 ## 2. 响应
 

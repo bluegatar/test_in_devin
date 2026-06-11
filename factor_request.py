@@ -15,11 +15,21 @@
   Path   : /app-management/videox/staticcache/v2/factor/miguvideo/android   (普通播放 PlayUrl, 返回 sv=10001)
            /app-management/videox/staticcache/v2/factor/miguvideo/ajsb      (JS 播放,      返回 sv=10031)
   Query  : 无
-  Headers: appCode = miguvideo_default_android
-           userId  = <你的用户ID, 实测 1768975581>
-           (NetworkManager 在 okhttp 拦截器里还会追加一批全局公共头: sourceId / APP-VERSION-CODE /
-            userInfo(URL编码JSON) / terminalId 等; 但 staticcache/factor 是公开配置接口,
-            实测仅带 appCode 即可命中 CDN 返回。userId 仅用于灰度/分流, 可留可去。)
+  Headers: 业务层只塞 appCode(+userId); NetworkManager 在 okhttp 拦截器里追加全局公共头。
+           ecapture(text 模式) 抓到的**完整上线请求头**(android/ajsb 相同, 仅 path 不同):
+             l_t / timeStamp  = 请求毫秒时间戳(两者相同)
+             l_c / clientId   = 客户端ID(两者相同, 设备级)
+             l_s              = 请求签名(疑似对其它头/时间戳的 MD5, 公开 staticcache 接口实测不强校验)
+             APP-VERSION-CODE = 260585013      appVersion = 2600058500   appVersionName = 6.5.85
+             appCode = miguvideo_default_android  appId = miguvideo   terminalId = android
+             osInfo = AD   networkInfo = WIFI   Support-Pendant = 1
+             User-Agent = Dalvik/2.1.0 (Linux; U; Android 13; <model> Build/...)
+             Phone-Info = <brand>|<model>|<sdk>   imei = unkonw(原文如此)
+             SDKCEId = <uuid>   X-UP-CLIENT-CHANNEL-ID = 2600058500-99000-200300220100002
+             Cache-Control = no-cache   Accept-Encoding = gzip   Host = v1-sc.miguvideo.com
+           注意: 实测此接口为公开配置接口, **仅带 appCode 即可命中 CDN 返回**;
+                 其余全局头不是必须的(签名 l_s 也不强校验)。下面 build_headers 给两档:
+                 minimal(够用) 与 full(贴近真机, 需自行填设备相关值)。
 
 响应 (staticcache 标准包装, body 即 factor bean):
   {"factor":"E8KmOzDHdgb0EGGi9uBJRw==","sv":"10001","tid":"android","updateTime":...}
@@ -30,6 +40,9 @@
 """
 
 import json
+import time
+import uuid
+
 import requests
 
 HOSTS = [
@@ -41,14 +54,38 @@ PATHS = {
     "ajsb":    "/app-management/videox/staticcache/v2/factor/miguvideo/ajsb",
 }
 
-def build_headers(user_id: str = "1768975581") -> dict:
+def build_headers(user_id: str = "1768975581", full: bool = False,
+                  client_id: str = "305ce4bb90adb65cf269c6ba3a39b953") -> dict:
+    """minimal(默认)够用; full=True 复刻 ecapture 抓到的真机完整公共头。"""
+    if not full:
+        return {
+            "appCode": "miguvideo_default_android",
+            "userId": user_id,
+        }
+    now_ms = str(int(time.time() * 1000))
     return {
+        "l_t": now_ms,
+        "timeStamp": now_ms,
+        "l_c": client_id,
+        "clientId": client_id,
+        # l_s 是请求签名(算法未确认); 公开 staticcache 接口实测不强校验, 故省略。
+        "APP-VERSION-CODE": "260585013",
+        "appVersion": "2600058500",
+        "appVersionName": "6.5.85",
         "appCode": "miguvideo_default_android",
+        "appId": "miguvideo",
+        "terminalId": "android",
+        "osInfo": "AD",
+        "networkInfo": "WIFI",
+        "Support-Pendant": "1",
+        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 13; 23076RA4BC Build/TKQ1.221114.001)",
+        "Phone-Info": "Redmi|23076RA4BC|13",
+        "imei": "unkonw",
+        "SDKCEId": str(uuid.uuid4()),
+        "X-UP-CLIENT-CHANNEL-ID": "2600058500-99000-200300220100002",
+        "Cache-Control": "no-cache",
+        "Accept-Encoding": "gzip",
         "userId": user_id,
-        # 如需更贴近真机, 可补全局公共头(非必须):
-        # "sourceId": "203005",
-        # "APP-VERSION-CODE": "260585013",
-        # "Content-Type": "application/json",
     }
 
 def fetch_factor(tid: str = "android", user_id: str = "1768975581", host: str = HOSTS[0]) -> dict:
