@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# Local extraction of the original Go project (do not commit)
+/extracted/
+
+# Downloaded media / working dirs
+*.ts
+*.mp4
+/ts/
