@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Fiddler Classic extension (.NET Framework 4.8). Build on Windows with the
+    .NET Framework dev pack + a local Fiddler Classic install. The Fiddler
+    reference resolves to Fiddler.exe from your install; override with
+    /p:FiddlerPath=... if Fiddler is installed elsewhere.
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <OutputType>Library</OutputType>
+    <AssemblyName>ECaptureFiddler</AssemblyName>
+    <RootNamespace>ECaptureFiddler</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+  <!-- Where Fiddler.exe lives. Override on the command line if needed. -->
+  <PropertyGroup>
+    <FiddlerPath Condition="'$(FiddlerPath)'=='' AND Exists('$(LOCALAPPDATA)\Programs\Fiddler\Fiddler.exe')">$(LOCALAPPDATA)\Programs\Fiddler</FiddlerPath>
+    <FiddlerPath Condition="'$(FiddlerPath)'=='' AND Exists('$(ProgramFiles)\Fiddler\Fiddler.exe')">$(ProgramFiles)\Fiddler</FiddlerPath>
+    <FiddlerPath Condition="'$(FiddlerPath)'=='' AND Exists('${ProgramFiles(x86)}\Fiddler2\Fiddler.exe')">${ProgramFiles(x86)}\Fiddler2</FiddlerPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="src\Proto.cs" />
+    <Compile Include="src\CapturedEvent.cs" />
+    <Compile Include="src\HttpBodyCodec.cs" />
+    <Compile Include="src\MatchedHttpPair.cs" />
+    <Compile Include="src\MessageBuffer.cs" />
+    <Compile Include="src\EventManager.cs" />
+    <Compile Include="src\ECaptureWebSocketClient.cs" />
+    <Compile Include="src\SessionInjector.cs" />
+    <Compile Include="src\ECaptureExtension.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="Fiddler">
+      <HintPath>$(FiddlerPath)\Fiddler.exe</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
