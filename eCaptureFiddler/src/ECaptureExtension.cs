@@ -66,13 +66,8 @@ namespace ECaptureFiddler.Fiddler
             _disconnectBtn.Click += (s, e) => _wsClient.Disconnect();
             top.Controls.Add(_disconnectBtn);
 
-            var clearBtn = new Button { Text = "Clear Counters" };
-            clearBtn.Click += (s, e) => _eventManager.Clear();
-            top.Controls.Add(clearBtn);
-
-            var exportBtn = new Button { Text = "Export all to HAR" };
-            exportBtn.Click += (s, e) => ExportAllToHar();
-            top.Controls.Add(exportBtn);
+            // Clearing the list and exporting (HAR/SAZ) are done from Fiddler's
+            // own UI (Edit menu / File -> Export Sessions), so no buttons here.
 
             var status = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 28, Padding = new Padding(5, 2, 5, 2) };
             _statusLabel = new Label { Text = "\u25CF Disconnected", ForeColor = Color.Gray, AutoSize = true };
@@ -149,26 +144,6 @@ namespace ECaptureFiddler.Fiddler
                 : (int)(DateTime.UtcNow - _eventManager.LastHeartbeatUtc).TotalSeconds + "s ago";
             _statsLabel.Text = string.Format("   Events: {0} | Pairs: {1} | Pending: {2} | Heartbeat: {3}",
                 _eventManager.TotalEvents, _eventManager.TotalPairs, _eventManager.PendingCount, hb);
-        }
-
-        private void ExportAllToHar()
-        {
-            try
-            {
-                var sessions = FiddlerApplication.UI.GetAllSessions();
-                if (sessions == null || sessions.Length == 0)
-                {
-                    MessageBox.Show("No sessions to export.", "Export to HAR");
-                    return;
-                }
-                // Use Fiddler's built-in HAR 1.2 exporter (prompts for a file).
-                FiddlerApplication.DoExport("HTTPArchive v1.2", sessions, null, null);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Export failed: " + ex.Message + "\n\nYou can also use File \u2192 Export Sessions \u2192 All Sessions \u2192 HTTPArchive v1.2.",
-                    "Export to HAR");
-            }
         }
 
         private void AppendLog(string line)
