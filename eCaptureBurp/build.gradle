@@ -1,0 +1,50 @@
+plugins {
+    id 'java'
+}
+
+group = 'com.ecapture.burp'
+version = '1.0.0'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    // Burp Suite Montoya API
+    compileOnly 'net.portswigger.burp.extensions:montoya-api:2023.12.1'
+    
+    // WebSocket client
+    implementation 'org.java-websocket:Java-WebSocket:1.5.6'
+    
+    // Protobuf runtime (for parsing)
+    implementation 'com.google.protobuf:protobuf-java:3.25.1'
+
+    // Brotli decompression (for Content-Encoding: br responses)
+    implementation 'org.brotli:dec:0.1.2'
+}
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+    
+    manifest {
+        attributes(
+            'Implementation-Title': 'eCapture Burp Extension',
+            'Implementation-Version': version
+        )
+    }
+    
+    archiveBaseName = 'ecapture-burp-extension'
+}
+
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+}
