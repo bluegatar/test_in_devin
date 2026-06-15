@@ -37,6 +37,7 @@ namespace ECaptureFiddler.Fiddler
             _eventManager.PairUpdated += OnPairUpdated;
             _eventManager.Log += AppendLog;
             _wsClient.Log += AppendLog;
+            SessionInjector.Log = AppendLog;
             _wsClient.StateChanged += OnStateChanged;
 
             BuildUi();
