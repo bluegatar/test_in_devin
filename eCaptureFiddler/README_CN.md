@@ -126,12 +126,13 @@ dotnet build ECaptureFiddler.csproj -c Release ^
 5. 配对完成的请求/响应会作为会话出现在 **Fiddler 主会话列表**里，点开即可在右侧
    Inspectors 看 Headers / Raw / JSON 等（body 已解压为明文）。
 
-### 4.3 导出 HAR
-- **全部导出**：eCapture 标签页里点 **Export all to HAR**，或用 Fiddler 原生
-  **File → Export Sessions → All Sessions… → 选择 “HTTPArchive v1.2”**。
+### 4.3 导出 HAR / 清空列表（用 Fiddler 原生功能）
+eCapture 标签页**不再提供** Clear / Export 按钮——会话注入到 Fiddler 主列表后，
+清空和导出直接用 Fiddler 自带能力即可：
+- **全部导出**：**File → Export Sessions → All Sessions… → 选择 “HTTPArchive v1.2”**。
 - **导出选中**：在主会话列表里多选（Shift/Ctrl）→ 右键 → **Save → Selected Sessions…**，
   或 File → Export Sessions → Selected Sessions → HTTPArchive v1.2。
-  （Fiddler 原生即支持多选导出 HAR，因此这部分直接复用 Fiddler 能力。）
+- **清空列表**：主菜单 **Edit → Remove → All Sessions**（或工具栏 X 按钮 / 快捷键 Ctrl+X）。
 
 ### 4.4 计数器/调试
 - eCapture 标签页底部状态栏显示 **Events / Pairs / Pending / Heartbeat**。

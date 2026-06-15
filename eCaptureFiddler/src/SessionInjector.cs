@@ -92,14 +92,25 @@ namespace ECaptureFiddler.Fiddler
             catch { /* cosmetic flag; ignore if unavailable */ }
         }
 
-        // Add the synthetic session to Fiddler's Web Sessions list. The exact
-        // method name on the main window has changed across Fiddler versions
-        // (e.g. actLoadSessions), so resolve any public instance method that
-        // takes a single Session[] argument and invoke it.
+        // Add the synthetic session to Fiddler's Web Sessions list. The API
+        // differs across versions: current Fiddler Classic (5.x) exposes the
+        // public instance method frmViewer.addSession(Session); older builds had
+        // actLoadSessions(Session[]). We resolve by EXACT, known-good method
+        // names only — never a generic "any method taking Session[]" fallback,
+        // because that previously picked ChangeGlobal/an export method and
+        // popped a "Select Export Format" dialog on every captured packet.
         private static MethodInfo _loadMethod;
         private static bool _loadResolved;
-
+        private static bool _loadIsArray;  // true: param is Session[]; false: single Session
         private static bool _logged;
+
+        // Exact method names that add a session to the list (case-sensitive match
+        // first, then case-insensitive). Single-Session adders are preferred for
+        // modern Fiddler; the Session[] loader covers older builds.
+        private static readonly string[] SingleSessionAdders =
+            { "addSession", "AddReportedSession", "AddSessionToTreeView", "addSessionToList" };
+        private static readonly string[] ArrayLoaders =
+            { "actLoadSessions", "LoadSessions", "ImportSessions" };
 
         private static void LoadIntoUi(Session oS)
         {
@@ -110,26 +121,31 @@ namespace ECaptureFiddler.Fiddler
             {
                 _logged = true;
                 LogLine("eCapture: UI type = " + ui.GetType().FullName);
-                LogLine("eCapture: methods taking Session[] = " + DescribeCandidates(ui.GetType()));
+                LogLine("eCapture: Session[] candidates = " + DescribeCandidates(ui.GetType()));
                 LogLine(mi != null
-                    ? "eCapture: injecting via UI." + mi.Name + "(Session[])"
-                    : "eCapture: NO suitable session-load method picked (not injecting).");
+                    ? "eCapture: injecting via UI." + mi.Name + (_loadIsArray ? "(Session[])" : "(Session)")
+                    : "eCapture: NO known session-add method found (not injecting).");
             }
             if (mi == null) return;
-            mi.Invoke(ui, new object[] { new[] { oS } });
+            object arg = _loadIsArray ? (object)new[] { oS } : oS;
+            mi.Invoke(ui, new object[] { arg });
             try { oS.RefreshUI(); } catch { }
         }
 
-        // For diagnostics: list every UI method that takes a single Session[]
-        // parameter, so the correct injection API can be pinned exactly.
+        // For diagnostics: list UI methods taking a single Session or Session[].
         private static string DescribeCandidates(Type uiType)
         {
             var sb = new StringBuilder();
             foreach (var m in uiType.GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance))
             {
                 ParameterInfo[] ps = m.GetParameters();
-                if (ps.Length != 1 || ps[0].ParameterType != typeof(Session[])) continue;
-                sb.Append(m.IsPublic ? "" : "[nonpublic]").Append(m.Name).Append("(Session[]) ");
+                if (ps.Length != 1) continue;
+                Type pt = ps[0].ParameterType;
+                bool arr = pt == typeof(Session[]);
+                bool one = pt == typeof(Session);
+                if (!arr && !one) continue;
+                sb.Append(m.IsPublic ? "" : "[np]").Append(m.Name)
+                  .Append(arr ? "(Session[]) " : "(Session) ");
             }
             return sb.Length == 0 ? "(none)" : sb.ToString();
         }
@@ -139,48 +155,38 @@ namespace ECaptureFiddler.Fiddler
             if (_loadResolved) return _loadMethod;
             _loadResolved = true;
 
-            // Include non-public methods: some Fiddler builds made the loader
-            // internal. Reflection runs in full trust inside Fiddler so this is
-            // invokable. We deliberately DO NOT fall back to "any method taking
-            // Session[]" — that previously picked an export/save method and
-            // popped a "Select Export Format" dialog per packet. Only accept a
-            // method whose name clearly adds sessions to the list: exact
-            // "actLoadSessions", or a (load|import|add)+"session" name that is
-            // not a destructive verb (save/select/export/...).
+            // Include non-public methods (full trust inside Fiddler), but only
+            // accept the exact known-good names above.
             MethodInfo[] methods = uiType.GetMethods(
                 BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-            _loadMethod = Pick(methods, m => m.Name == "actLoadSessions")
-                       ?? Pick(methods, m => IsLoadName(m.Name));
+
+            // Prefer the single-Session adder used by modern Fiddler Classic.
+            MethodInfo m1 = PickExact(methods, SingleSessionAdders, typeof(Session));
+            if (m1 != null) { _loadMethod = m1; _loadIsArray = false; return _loadMethod; }
+
+            MethodInfo m2 = PickExact(methods, ArrayLoaders, typeof(Session[]));
+            if (m2 != null) { _loadMethod = m2; _loadIsArray = true; return _loadMethod; }
+
+            _loadMethod = null;
             return _loadMethod;
         }
 
-        private static readonly string[] DestructiveVerbs =
-            { "save", "select", "export", "remove", "delete", "close", "zip", "saz", "clear", "tag" };
-
-        private static bool IsDestructiveName(string name)
+        private static MethodInfo PickExact(MethodInfo[] methods, string[] names, Type paramType)
         {
-            foreach (var v in DestructiveVerbs)
-                if (name.IndexOf(v, StringComparison.OrdinalIgnoreCase) >= 0) return true;
-            return false;
-        }
-
-        private static bool IsLoadName(string name)
-        {
-            if (IsDestructiveName(name)) return false;
-            if (name.IndexOf("session", StringComparison.OrdinalIgnoreCase) < 0) return false;
-            return name.IndexOf("load", StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("import", StringComparison.OrdinalIgnoreCase) >= 0
-                || name.IndexOf("add", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
-        private static MethodInfo Pick(MethodInfo[] methods, Func<MethodInfo, bool> nameFilter)
-        {
-            foreach (var m in methods)
+            // Case-sensitive pass first, then case-insensitive.
+            for (int pass = 0; pass < 2; pass++)
             {
-                if (!nameFilter(m)) continue;
-                ParameterInfo[] ps = m.GetParameters();
-                if (ps.Length == 1 && ps[0].ParameterType == typeof(Session[]))
-                    return m;
+                var cmp = pass == 0 ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+                foreach (var want in names)
+                {
+                    foreach (var m in methods)
+                    {
+                        if (!string.Equals(m.Name, want, cmp)) continue;
+                        ParameterInfo[] ps = m.GetParameters();
+                        if (ps.Length == 1 && ps[0].ParameterType == paramType)
+                            return m;
+                    }
+                }
             }
             return null;
         }
